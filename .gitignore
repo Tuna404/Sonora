@@ -1,0 +1,10 @@
+node_modules
+dist
+
+.vscode
+
+#Temp
+public/
+src/assets
+src-tauri/icons
+
