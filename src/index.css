@@ -1,1 +1,16 @@
+@import "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap";
 @import "tailwindcss";
+
+@theme {
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --color-kokoro-50: #eff6ff;
+  --color-kokoro-100: #dbeafe;
+  --color-kokoro-200: #bfdbfe;
+  --color-kokoro-300: #93c5fd;
+  --color-kokoro-400: #60a5fa;
+  --color-kokoro-500: #3b82f6;
+  --color-kokoro-600: #2563eb;
+  --color-kokoro-700: #1d4ed8;
+  --color-kokoro-800: #1e40af;
+  --color-kokoro-900: #1e3a8a;
+}
