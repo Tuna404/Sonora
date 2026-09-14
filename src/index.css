@@ -1,8 +1,9 @@
-@import "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap";
+@import "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap";
+@import "https://fonts.googleapis.com/css2?family=Boldonse&display=swap";
 @import "tailwindcss";
 
 @theme {
-  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "JetBrains Mono", ui-monospace, monospace;
   --color-kokoro-50: #eff6ff;
   --color-kokoro-100: #dbeafe;
   --color-kokoro-200: #bfdbfe;
@@ -13,4 +14,8 @@
   --color-kokoro-700: #1d4ed8;
   --color-kokoro-800: #1e40af;
   --color-kokoro-900: #1e3a8a;
+}
+
+html {
+  font-family: var(--font-sans);
 }
