@@ -1,26 +1,19 @@
-import { createSignal, onMount } from "solid-js";
+import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import VoiceSelector from "./components/VoiceSelector";
+import Toolbar from "./components/Toolbar";
 import TextInput from "./components/TextInput";
-import GenerateButton from "./components/GenerateButton";
+import ControlBar from "./components/ControlBar";
 import AudioPlayer from "./components/AudioPlayer";
 import SaveButton from "./components/SaveButton";
 import HistoryPanel from "./components/HistoryPanel";
+import SettingsPanel from "./components/SettingsPanel";
+import Sheet from "./components/Sheet";
+import SlideOver from "./components/SlideOver";
+import { toWavBytes, createWavUrl } from "./lib/audio";
+import { MAX_TEXT_CHARS } from "./lib/constants";
+import type { SynthSaveResult, SynthResult, HistoryEntry, Settings } from "./lib/types";
 
-interface SynthResult {
-  audio: string;
-  format: string;
-  sample_rate: number;
-}
-
-interface HistoryEntry {
-  id: string;
-  text: string;
-  voice: string;
-  timestamp: number;
-}
-
-type View = "generate" | "history";
+type Overlay = "none" | "history" | "settings";
 
 function App() {
   const [voices, setVoices] = createSignal<string[]>([]);
@@ -30,27 +23,113 @@ function App() {
   const [wavBytes, setWavBytes] = createSignal<Uint8Array | null>(null);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
-  const [view, setView] = createSignal<View>("generate");
+  const [overlay, setOverlay] = createSignal<Overlay>("none");
   const [history, setHistory] = createSignal<HistoryEntry[]>([]);
+  const [refocusKey, setRefocusKey] = createSignal(0);
+  const [speed, setSpeed] = createSignal(1.0);
+  const [settings, setSettings] = createSignal<Settings | null>(null);
 
-  async function loadHistory() {
-    try {
-      const h = await invoke<HistoryEntry[]>("get_history");
-      setHistory(h);
-    } catch (e) {
-      console.error(e);
+  /** Replace the current audio, revoking the previous object URL. */
+  function setAudioFromBytes(bytes: Uint8Array<ArrayBuffer>) {
+    revokeAudio();
+    setWavBytes(bytes);
+    setAudioUrl(createWavUrl(bytes));
+  }
+
+  /** Drop the current audio and release its object URL. */
+  function revokeAudio() {
+    const url = audioUrl();
+    if (url) URL.revokeObjectURL(url);
+    setAudioUrl(null);
+    setWavBytes(null);
+  }
+
+  onCleanup(revokeAudio);
+
+  function handleVoiceChange(v: string) {
+    setSelectedVoice(v);
+    revokeAudio();
+    localStorage.setItem("kokorou_voice", v);
+  }
+
+  function handleSpeedChange(v: number) {
+    setSpeed(v);
+    revokeAudio();
+  }
+
+  function handleSettingsChange(s: Settings) {
+    setSettings(s);
+    setSpeed(s.default_speed);
+    if (s.default_voice && voices().includes(s.default_voice)) {
+      setSelectedVoice(s.default_voice);
     }
   }
 
-  onMount(async () => {
+  function openOverlay(o: Overlay) {
+    setOverlay((cur) => (cur === o ? "none" : o));
+  }
+
+  function closeOverlay() {
+    if (overlay() === "none") return;
+    setOverlay("none");
+    setRefocusKey((k) => k + 1);
+  }
+
+  /** Return to a clean slate: clear the text and discard the current clip. */
+  function handleNewWorkspace() {
+    setText("");
+    revokeAudio();
+    setError(null);
+    setRefocusKey((k) => k + 1);
+  }
+
+  const canNew = () => text().length > 0 || audioUrl() !== null;
+
+  async function loadHistory() {
     try {
-      const v = await invoke<string[]>("list_voices");
+      setHistory(await invoke<HistoryEntry[]>("get_history"));
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  async function loadInitial() {
+    try {
+      const [v, s] = await Promise.all([
+        invoke<string[]>("list_voices"),
+        invoke<Settings>("get_settings"),
+      ]);
       setVoices(v);
-      if (v.length > 0) setSelectedVoice(v[0]);
+      setSettings(s);
+      setSpeed(s.default_speed);
+
+      const savedVoice = s.default_voice || localStorage.getItem("kokorou_voice");
+      if (savedVoice && v.includes(savedVoice)) {
+        setSelectedVoice(savedVoice);
+      } else if (v.length > 0) {
+        setSelectedVoice(v[0]);
+      }
     } catch (e) {
       setError(String(e));
     }
     loadHistory();
+  }
+
+  onMount(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        closeOverlay();
+      } else if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        setOverlay("settings");
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        handleNewWorkspace();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    onCleanup(() => window.removeEventListener("keydown", onKey));
+    void loadInitial();
   });
 
   async function handleGenerate() {
@@ -58,27 +137,14 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const result = await invoke<SynthResult>("synth", {
+      const result = await invoke<SynthSaveResult>("synth", {
         text: text(),
         voice: selectedVoice(),
+        speed: speed(),
       });
-      const binary = atob(result.audio);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const blob = new Blob([bytes], { type: "audio/wav" });
-      setAudioUrl(URL.createObjectURL(blob));
-      setWavBytes(bytes);
-
-      try {
-        await invoke("save_generation", {
-          text: text(),
-          voice: selectedVoice(),
-          audio: Array.from(bytes),
-        });
-        loadHistory();
-      } catch (e) {
-        console.error("Save to history failed:", e);
-      }
+      setAudioFromBytes(toWavBytes(result));
+      // `synth` persists history server-side, so no extra round-trip is needed.
+      setHistory((prev) => [result.entry, ...prev]);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -89,21 +155,17 @@ function App() {
   function handleHistorySelect(entry: HistoryEntry) {
     setText(entry.text);
     setSelectedVoice(entry.voice);
-    setView("generate");
+    setOverlay("none");
     loadHistoryAudio(entry.id);
+    setRefocusKey((k) => k + 1);
   }
 
   async function loadHistoryAudio(id: string) {
     try {
       const result = await invoke<SynthResult>("load_history_audio", { id });
-      const binary = atob(result.audio);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const blob = new Blob([bytes], { type: "audio/wav" });
-      setAudioUrl(URL.createObjectURL(blob));
-      setWavBytes(bytes);
+      setAudioFromBytes(toWavBytes(result));
     } catch (e) {
-      console.error(e);
+      setError(String(e));
     }
   }
 
@@ -111,82 +173,97 @@ function App() {
     setHistory((prev) => prev.filter((e) => e.id !== id));
   }
 
-  function tabClass(tab: View) {
-    const active = view() === tab;
-    return `px-4 py-1.5 text-sm transition-colors ${
-      active
-        ? "bg-gray-800 text-gray-100 font-medium"
-        : "bg-gray-950 text-gray-500 hover:text-gray-300"
-    }`;
+  async function handleClearAll() {
+    try {
+      await invoke("clear_history");
+      setHistory([]);
+    } catch (e) {
+      setError(String(e));
+    }
   }
 
   return (
-    <div class="flex h-screen flex-col bg-gray-950">
-      <header class="flex flex-col items-center gap-3 pt-4 pb-2">
-        <div class="border-2 border-gray-500 px-5 py-2">
-          <h1 class="text-2xl font-bold">
-            <span class="font-['Boldonse'] text-white">Kokoro</span>
-            <span class="font-['Boldonse'] text-blue-400">U</span>
-          </h1>
-        </div>
-        <div class="flex divide-x divide-gray-700 overflow-hidden rounded-md border border-gray-700">
-          <button class={tabClass("generate")} onClick={() => setView("generate")}>
-            Generate
+    <div class="flex h-screen flex-col bg-surface text-content">
+      <Toolbar
+        historyActive={overlay() === "history"}
+        settingsActive={overlay() === "settings"}
+        onOpenHistory={() => openOverlay("history")}
+        onOpenSettings={() => openOverlay("settings")}
+      />
+
+      <Show when={error()}>
+        <div class="flex items-start justify-between gap-3 bg-[var(--danger-bg)] px-4 py-2">
+          <p class="min-w-0 flex-1 break-words text-[12px] text-danger">{error()}</p>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            aria-label="Dismiss"
+            title="Dismiss"
+            class="shrink-0 text-[12px] text-danger transition-opacity hover:opacity-70"
+          >
+            ✕
           </button>
-          <button class={tabClass("history")} onClick={() => setView("history")}>
-            History
-          </button>
         </div>
-      </header>
+      </Show>
 
-      {view() === "generate" ? (
-        <>
-          <main class="flex min-h-0 flex-1 flex-col">
-            <div class="flex flex-1 flex-col px-6 pt-4 pb-3">
-              <TextInput value={text()} onChange={setText} />
-            </div>
-
-            <div class="flex items-center gap-4 px-6 pb-4">
-              <div class="flex items-center gap-4 flex-1">
-                <VoiceSelector
-                  voices={voices()}
-                  value={selectedVoice()}
-                  onChange={setSelectedVoice}
-                />
-                <GenerateButton
-                  onClick={handleGenerate}
-                  loading={loading()}
-                  disabled={!text().trim() || !selectedVoice()}
-                />
-                {error() && <p class="text-sm text-red-400">{error()}</p>}
-              </div>
-              {text().length > 0 && (
-                <button
-                  onClick={() => setText("")}
-                  class="rounded-md border border-gray-600 px-3 py-1.5 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-800"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </main>
-
-          {audioUrl() && (
-            <div class="flex items-center justify-between gap-4 border-t border-gray-800 px-6 py-3">
-              <div class="flex-1">
-                <AudioPlayer src={audioUrl()!} />
-              </div>
-              <SaveButton wavBytes={wavBytes()!} name={text().trim()} />
-            </div>
-          )}
-        </>
-      ) : (
-        <HistoryPanel
-          entries={history()}
-          onSelect={handleHistorySelect}
-          onDelete={handleHistoryDelete}
+      <main class="flex min-h-0 flex-1 flex-col px-5 pt-4 pb-3">
+        <TextInput
+          value={text()}
+          onChange={setText}
+          onSubmit={handleGenerate}
+          refocusKey={refocusKey()}
         />
-      )}
+      </main>
+
+      <Show when={audioUrl()}>
+        <div class="flex shrink-0 items-center justify-between gap-4 border-t border-separator px-4 py-2.5">
+          <div class="min-w-0 flex-1">
+            <AudioPlayer src={audioUrl()!} />
+          </div>
+          <SaveButton wavBytes={wavBytes()!} />
+        </div>
+      </Show>
+
+      <ControlBar
+        voices={voices()}
+        voice={selectedVoice()}
+        onVoiceChange={handleVoiceChange}
+        speed={speed()}
+        onSpeedChange={handleSpeedChange}
+        length={text().length}
+        maxLength={MAX_TEXT_CHARS}
+        canClear={text().length > 0}
+        onClear={() => setText("")}
+        canNew={canNew()}
+        onNew={handleNewWorkspace}
+        onGenerate={handleGenerate}
+        loading={loading()}
+        canGenerate={text().trim().length > 0 && selectedVoice().length > 0}
+      />
+
+      <Show when={overlay() === "history"}>
+        <SlideOver title={`History (${history().length})`} onClose={closeOverlay}>
+          <HistoryPanel
+            entries={history()}
+            onSelect={handleHistorySelect}
+            onDelete={handleHistoryDelete}
+            onClearAll={handleClearAll}
+            onError={setError}
+          />
+        </SlideOver>
+      </Show>
+
+      <Show when={overlay() === "settings"}>
+        <Sheet title="Settings" onClose={closeOverlay}>
+          <SettingsPanel
+            voices={voices()}
+            settings={settings()}
+            onSettingsChange={handleSettingsChange}
+            onClose={closeOverlay}
+            onError={setError}
+          />
+        </Sheet>
+      </Show>
     </div>
   );
 }

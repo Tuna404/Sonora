@@ -1,8 +1,10 @@
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
+use crate::settings::Settings;
 use crate::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -10,6 +12,16 @@ pub struct SynthResult {
     pub audio: String,
     pub format: String,
     pub sample_rate: u32,
+}
+
+/// `synth` also persists the clip to history, so it returns the created entry
+/// alongside the audio for immediate playback.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SynthSaveResult {
+    pub audio: String,
+    pub format: String,
+    pub sample_rate: u32,
+    pub entry: HistoryEntry,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -26,33 +38,58 @@ pub fn list_voices(state: State<'_, AppState>) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+pub fn get_settings(state: State<'_, AppState>) -> Result<Settings, String> {
+    Ok(Settings::load(&state.settings_path))
+}
+
+#[tauri::command]
+pub fn save_settings(state: State<'_, AppState>, settings: Settings) -> Result<(), String> {
+    settings.save(&state.settings_path)
+}
+
+const MAX_TEXT_LENGTH: usize = 400;
+
+#[tauri::command]
 pub async fn synth(
     state: State<'_, AppState>,
     text: String,
     voice: String,
-) -> Result<SynthResult, String> {
+    speed: f32,
+) -> Result<SynthSaveResult, String> {
+    if text.len() > MAX_TEXT_LENGTH {
+        return Err(format!(
+            "Text exceeds maximum length of {MAX_TEXT_LENGTH} characters (got {})",
+            text.len()
+        ));
+    }
+    let voice_name = voice;
+    let voice = kokoro_en::Voice::new(&voice_name).with_speed(speed);
     let (samples, _took) = state
         .tts
-        .synth(&text, &voice)
+        .synth(&text, voice)
         .await
         .map_err(|e| format!("Synth failed: {e}"))?;
 
     let wav_bytes = encode_wav(&samples, 24000);
+    // Persist here so the frontend never has to ship the audio bytes back over
+    // IPC just to save them.
+    let entry = append_history(&state, text, voice_name, &wav_bytes)?;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&wav_bytes);
 
-    Ok(SynthResult {
+    Ok(SynthSaveResult {
         audio: b64,
         format: "wav".into(),
         sample_rate: 24000,
+        entry,
     })
 }
 
-#[tauri::command]
-pub async fn save_generation(
-    state: State<'_, AppState>,
+/// Append a finished clip to the on-disk history and return its entry.
+fn append_history(
+    state: &AppState,
     text: String,
     voice: String,
-    audio: Vec<u8>,
+    audio: &[u8],
 ) -> Result<HistoryEntry, String> {
     let id = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -64,7 +101,7 @@ pub async fn save_generation(
     std::fs::create_dir_all(history_dir).map_err(|e| format!("Dir create failed: {e}"))?;
 
     let wav_path = history_dir.join(format!("{id}.wav"));
-    std::fs::write(&wav_path, &audio).map_err(|e| format!("Write failed: {e}"))?;
+    std::fs::write(&wav_path, audio).map_err(|e| format!("Write failed: {e}"))?;
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -143,24 +180,67 @@ pub fn delete_history_entry(
 }
 
 #[tauri::command]
+pub async fn save_history_audio(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    default_name: String,
+) -> Result<String, String> {
+    let wav_path = state.history_path.join(format!("{id}.wav"));
+    let data = std::fs::read(&wav_path).map_err(|e| format!("Read failed: {e}"))?;
+    write_with_dialog(&app, &state, &data, &default_name)
+}
+
+#[tauri::command]
+pub fn clear_history(state: State<'_, AppState>) -> Result<(), String> {
+    let history_dir = &state.history_path;
+    if let Ok(entries) = std::fs::read_dir(history_dir) {
+        for entry in entries.flatten() {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn save_audio(
     app: tauri::AppHandle,
+    state: State<'_, AppState>,
     data: Vec<u8>,
     default_name: String,
 ) -> Result<String, String> {
+    write_with_dialog(&app, &state, &data, &default_name)
+}
+
+/// Prompt for a save location (honouring the configured default directory) and
+/// write `data` there. Shared by `save_audio` and `save_history_audio`.
+fn write_with_dialog(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    data: &[u8],
+    default_name: &str,
+) -> Result<String, String> {
     use tauri_plugin_dialog::DialogExt;
 
-    let path = app
+    let settings = Settings::load(&state.settings_path);
+    let ext = &settings.audio_format;
+    // Truncate on char boundaries so multi-byte names can't panic.
+    let stem: String = default_name.chars().take(60).collect();
+
+    let mut dialog = app
         .dialog()
         .file()
-        .add_filter("Audio", &["wav"])
-        .set_file_name(&format!("{}.wav", &default_name[..default_name.len().min(60)]))
-        .blocking_save_file();
+        .add_filter("Audio", &[ext.as_str()])
+        .set_file_name(format!("{stem}.{ext}"));
 
-    match path {
+    if let Some(dir) = &settings.default_directory {
+        dialog = dialog.set_directory(Path::new(dir));
+    }
+
+    match dialog.blocking_save_file() {
         Some(p) => {
             let p = p.as_path().unwrap();
-            std::fs::write(p, &data).map_err(|e| format!("Write failed: {e}"))?;
+            std::fs::write(p, data).map_err(|e| format!("Write failed: {e}"))?;
             Ok(p.to_string_lossy().to_string())
         }
         None => Err("Cancelled".into()),

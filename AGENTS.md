@@ -35,45 +35,62 @@ The TTS engine runs **in-process** via the `kokoro-en` crate — no sidecar, no 
 | Command | Args | Returns |
 |---------|------|---------|
 | `list_voices` | — | `Vec<String>` (voice names) |
-| `synth` | `text: String`, `voice: String` | `SynthResult` (base64 WAV) |
-| `save_audio` | `data: Vec<u8>`, `default_name: String` | saved file path |
+| `synth` | `text`, `voice`, `speed` | `SynthSaveResult` (base64 WAV + persisted `HistoryEntry`) |
+| `save_audio` | `data: Vec<u8>`, `default_name` | saved file path |
+| `get_settings` / `save_settings` | — / `settings` | `Settings` / — |
+| `get_history` | — | `HistoryEntry[]` (newest first) |
+| `load_history_audio` | `id` | `SynthResult` |
+| `save_history_audio` | `id`, `default_name` | saved file path |
+| `delete_history_entry` | `id` | — |
+| `clear_history` | — | — |
 
-Handlers live in `src-tauri/src/commands.rs`. The `KokoroTts` instance is managed as Tauri state.
+Handlers live in `src-tauri/src/commands.rs`. The `KokoroTts` instance is managed as Tauri state. `synth` persists the clip to history itself, so the frontend never ships audio bytes back over IPC to save them. Both save commands share one `write_with_dialog` helper; settings live in `src-tauri/src/settings.rs`.
 
 ## Frontend Components (`src/components/`)
 
 | Component | Role |
 |-----------|------|
-| `VoiceSelector` | Inline dropdown populated from `list_voices` |
+| `Toolbar` | Unified title bar: drag region, History/Settings buttons (hairline divider between) |
+| `Sheet` | Modal sheet primitive (used by Settings) |
+| `SlideOver` | Right-docked panel primitive (used by History) |
+| `ControlBar` | Bottom bar: voice, speed (+reset), char counter, New, Clear, Generate |
+| `VoiceSelector` | Searchable, keyboard-navigable dropdown populated from `list_voices` |
 | `TextInput` | Full-height textarea that fills available space |
-| `GenerateButton` | Inline button, calls `synth`, shows loading spinner |
+| `SpeedControl` | Slider for speaking rate (0.5–2.0×) with reset-to-1× button |
+| `GenerateButton` | Primary button, calls `synth`, shows loading spinner |
 | `AudioPlayer` | Raw `<audio>` element with native controls |
 | `SaveButton` | Inline button, opens OS save dialog, writes WAV |
+| `HistoryPanel` | Searchable list of past clips: replay, re-use, download, delete |
+| `SettingsPanel` | Default voice, speed, format, and save directory |
+| `icons` | Inline SVG icon set (no icon dependency) |
 
-Root component `App.tsx` composes these. State managed with Solid signals — no store/router needed.
+Root component `App.tsx` composes these. **Generate is the whole window**; History and Settings are secondary surfaces opened from the toolbar (`overlay` signal) — History as a right slide-over, Settings as a modal sheet. State managed with Solid signals — no store/router needed. Shared helpers live in `src/lib/` (`types.ts`, `audio.ts` for base64/WAV/object-URL handling, `format.ts` for recording names and relative times, `constants.ts` for the input cap).
 
 ## UI Layout
 
-Dark theme (`bg-gray-950`), Inter font, `rounded-md` corners, no gradients.
+Native macOS-style chrome: system font (SF Pro via `-apple-system`), semantic light/dark tokens (see `index.css`), translucent toolbar/sheets with backdrop blur, hairline separators. Window uses `titleBarStyle: "Overlay"` + `hiddenTitle` so content extends under the traffic lights; `trafficLightPosition` centers them with the 44px toolbar (on macOS the light center lands ≈ `y` px from the top, so keep `y` ≈ toolbar height / 2 — currently 22).
+
+With `Overlay`, the native title-bar drag is gone, so the window is dragged via the `Toolbar`'s `data-tauri-drag-region="deep"` attribute. That attribute invokes `plugin:window|start_dragging`, which is **not** part of `core:default` — the `core:window:allow-start-dragging` permission must stay in `src-tauri/capabilities/default.json` or the window becomes undraggable. `"deep"` makes the whole toolbar subtree draggable while clickable children (buttons/inputs) still block drag.
 
 ```
 ┌──────────────────────────────────────────┐
-│  KOKORO                    (thin header) │
+│  ●●●   KokoroU               ⏱︎ │ ⚙︎     │  toolbar (drag region)
 ├──────────────────────────────────────────┤
-│                                          │
-│  ┌── textarea (fills window height) ──┐  │
-│  │  Enter text to speak...            │  │
-│  │                                     │  │
+│  ┌── text editor (fills window) ───────┐  │
+│  │  Enter text to speak...             │  │
 │  └─────────────────────────────────────┘  │
 │                                          │
-│  Voice [af_heart ▼]   [🔊 Generate]     │
-│                                          │
 ├──────────────────────────────────────────┤
-│  ▶  ═══════●══════  0:00/3:45  [Save]   │
+│  ▶ ──────●──── 0:00/3:45        [Save]   │  player (after generate)
+├──────────────────────────────────────────┤
+│ Voice [af_heart ▾] Speed ──●── 1.0× ↺    │
+│            120/400 [New][Clear][Gen]     │  control bar
 └──────────────────────────────────────────┘
 ```
 
-Controls sit below the textarea in a single row. After generation, the bottom bar appears with the audio player and save button.
+History slides in from the right; Settings opens as a centered sheet. `Esc` closes either; `⌘,` opens Settings. Non-blocking errors surface in a dismissible banner under the toolbar.
+
+Shortcuts and workspace actions: **New** (`⌘N`, control-bar button) clears the text and discards the current clip for a clean slate — the control bar's **Clear** only clears the text. In Settings, **Save** persists, flashes "Saved ✓", and closes the sheet; **Reset** restores defaults, persists, and flashes "Reset ✓".
 
 ## Project Structure
 
@@ -81,19 +98,33 @@ Controls sit below the textarea in a single row. After generation, the bottom ba
 kokorou/
 ├── src/
 │   ├── index.tsx
-│   ├── index.css              # @import "tailwindcss", Inter font, kokoro color palette
-│   ├── App.tsx                # root: composes all components
+│   ├── index.css              # @import "tailwindcss", system font, light/dark semantic tokens
+│   ├── App.tsx                # root: composes all components, owns shared state
+│   ├── lib/
+│   │   ├── types.ts           # SynthResult / HistoryEntry / Settings
+│   │   ├── audio.ts           # base64 → bytes → blob URL helpers
+│   │   ├── format.ts          # recording names + relative timestamps
+│   │   └── constants.ts       # MAX_TEXT_CHARS
 │   └── components/
+│       ├── Toolbar.tsx
+│       ├── Sheet.tsx
+│       ├── SlideOver.tsx
+│       ├── ControlBar.tsx
 │       ├── VoiceSelector.tsx
 │       ├── TextInput.tsx
+│       ├── SpeedControl.tsx
 │       ├── GenerateButton.tsx
 │       ├── AudioPlayer.tsx
-│       └── SaveButton.tsx
+│       ├── SaveButton.tsx
+│       ├── HistoryPanel.tsx
+│       ├── SettingsPanel.tsx
+│       └── icons.tsx
 ├── src-tauri/
 │   ├── src/
 │   │   ├── main.rs
 │   │   ├── lib.rs             # Tauri setup, init KokoroTts as state
-│   │   └── commands.rs        # list_voices, synth, save_audio
+│   │   ├── commands.rs        # voices, synth, history, save, settings commands
+│   │   └── settings.rs        # Settings load/save (app data dir)
 │   ├── resources/
 │   │   ├── model.onnx         # fp32 (~325 MB, downloaded)
 │   │   └── voices/            # all 55 *.bin voice files (downloaded)
@@ -111,11 +142,12 @@ kokorou/
 ## Data Flow
 
 1. App starts → Rust `setup()` initializes `KokoroTts` with model + voices paths
-2. Frontend calls `list_voices` → dropdown populated
-3. User selects voice, enters text, clicks Generate
-4. Frontend calls `synth(text, voice)` → Rust runs `tts.synth()` → returns base64 WAV
-5. Frontend decodes base64 into `Uint8Array`, creates `Blob` → sets `<audio>` src as blob URL
+2. Frontend loads `list_voices` + `get_settings` in parallel, then `get_history`
+3. User selects voice/speed, enters text, clicks Generate
+4. Frontend calls `synth(text, voice, speed)` → Rust runs `tts.synth()`, encodes WAV, **persists it to history**, and returns base64 WAV + the new `HistoryEntry`
+5. Frontend decodes base64 into `Uint8Array`, creates a `Blob` → sets `<audio>` src as a blob URL (previous URL is revoked on replace)
 6. User clicks Save → frontend sends raw `Uint8Array` to `save_audio()` → Rust opens OS dialog → writes WAV to disk
+7. Voice/speed changes and new selections revoke the current blob URL; history playback uses the same revoke-on-replace lifecycle
 
 ## Model Setup
 

@@ -1,32 +1,41 @@
-import { createSignal } from "solid-js";
+import { createSignal, createMemo, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-
-interface HistoryEntry {
-  id: string;
-  text: string;
-  voice: string;
-  timestamp: number;
-}
+import { confirm } from "@tauri-apps/plugin-dialog";
+import { toWavBytes, createWavUrl } from "../lib/audio";
+import { recordingNameFromSeconds, relativeTime } from "../lib/format";
+import type { HistoryEntry, SynthResult } from "../lib/types";
+import { IconPlay, IconPause, IconDownload, IconTrash } from "./icons";
 
 interface Props {
   entries: HistoryEntry[];
   onSelect: (entry: HistoryEntry) => void;
   onDelete: (id: string) => void;
-}
-
-function relTime(ts: number): string {
-  const diff = Date.now() / 1000 - ts;
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 2592000) return `${Math.floor(diff / 86400)}d ago`;
-  return new Date(ts * 1000).toLocaleDateString();
+  onClearAll: () => void;
+  onError?: (message: string) => void;
 }
 
 function HistoryPanel(props: Props) {
   const [playingId, setPlayingId] = createSignal<string | null>(null);
   const [audioUrl, setAudioUrl] = createSignal<string | null>(null);
+  const [query, setQuery] = createSignal("");
   let audioRef: HTMLAudioElement | undefined;
+
+  function revokeCurrent() {
+    const url = audioUrl();
+    if (url) URL.revokeObjectURL(url);
+    setAudioUrl(null);
+  }
+
+  onCleanup(revokeCurrent);
+
+  const filtered = createMemo(() => {
+    const q = query().trim().toLowerCase();
+    if (!q) return props.entries;
+    return props.entries.filter(
+      (e) =>
+        e.text.toLowerCase().includes(q) || e.voice.toLowerCase().includes(q),
+    );
+  });
 
   async function handlePlay(entry: HistoryEntry) {
     if (playingId() === entry.id) {
@@ -35,101 +44,151 @@ function HistoryPanel(props: Props) {
       return;
     }
     try {
-      const result = await invoke<{ audio: string; format: string; sample_rate: number }>(
-        "load_history_audio",
-        { id: entry.id },
-      );
-      const binary = atob(result.audio);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const blob = new Blob([bytes], { type: "audio/wav" });
-      const url = URL.createObjectURL(blob);
-      setAudioUrl(url);
+      const result = await invoke<SynthResult>("load_history_audio", {
+        id: entry.id,
+      });
+      revokeCurrent();
+      setAudioUrl(createWavUrl(toWavBytes(result)));
       setPlayingId(entry.id);
       setTimeout(() => audioRef?.play(), 0);
     } catch (e) {
-      console.error(e);
+      props.onError?.(String(e));
     }
   }
 
   function handleAudioEnded() {
     setPlayingId(null);
-    if (audioUrl()) {
-      URL.revokeObjectURL(audioUrl()!);
-      setAudioUrl(null);
-    }
+    revokeCurrent();
   }
 
   return (
-    <div class="flex flex-1 flex-col px-6 pt-4 pb-3">
-      <div class="mb-3 flex items-center justify-between">
-        <h2 class="text-xs font-semibold tracking-widest text-gray-500 uppercase">
-          History ({props.entries.length})
-        </h2>
-        {props.entries.length > 0 && (
-          <p class="text-xs text-gray-700">Click an entry to edit and regenerate</p>
-        )}
+    <div class="flex min-h-0 flex-1 flex-col p-3">
+      <div class="mb-2 flex items-center gap-2">
+        <input
+          value={query()}
+          onInput={(e) => setQuery(e.currentTarget.value)}
+          placeholder="Filter by text or voice..."
+          class="min-w-0 flex-1 rounded-md border border-separator bg-[var(--editor)] px-2 py-1 text-[12px] text-content placeholder:text-content-tertiary focus:border-accent focus:outline-none"
+        />
+        <Show when={props.entries.length > 0}>
+          <button
+            type="button"
+            onClick={async () => {
+              if (
+                await confirm("Delete all history entries?", {
+                  title: "Clear History",
+                  kind: "warning",
+                })
+              ) {
+                props.onClearAll();
+              }
+            }}
+            class="shrink-0 rounded-md border border-[var(--control-border)] px-2 py-1 text-[12px] text-danger transition-colors hover:bg-[var(--control-hover)]"
+          >
+            Clear all
+          </button>
+        </Show>
       </div>
-      <audio ref={audioRef} src={audioUrl() ?? undefined} onEnded={handleAudioEnded} class="hidden" />
-      {props.entries.length === 0 ? (
-        <div class="flex flex-1 items-center justify-center">
-          <p class="text-sm text-gray-600">No generations yet</p>
-        </div>
-      ) : (
+      <audio
+        ref={audioRef}
+        src={audioUrl() ?? undefined}
+        onEnded={handleAudioEnded}
+        class="hidden"
+      />
+      <Show
+        when={filtered().length > 0}
+        fallback={
+          <div class="flex flex-1 items-center justify-center">
+            <p class="text-[12px] text-content-tertiary">
+              {props.entries.length === 0 ? "No generations yet" : "No matches"}
+            </p>
+          </div>
+        }
+      >
         <div class="flex flex-1 flex-col gap-1 overflow-y-auto">
-          {props.entries.map((entry) => (
-            <div
-              title="Click to edit and regenerate"
-              onClick={() => props.onSelect(entry)}
-              class="flex cursor-pointer flex-col gap-0.5 rounded-md border border-gray-800 px-3 py-2 transition-colors hover:border-gray-700 hover:bg-gray-900"
-            >
-              <div class="flex items-center gap-2">
+          <For each={filtered()}>
+            {(entry) => (
+              <div
+                title="Click to edit and regenerate"
+                onClick={() => props.onSelect(entry)}
+                class="flex cursor-pointer items-center gap-2 rounded-md border border-separator px-2 py-1.5 transition-colors hover:bg-[var(--control-hover)]"
+              >
                 <div onClick={(e) => e.stopPropagation()}>
                   <button
+                    type="button"
                     onClick={() => handlePlay(entry)}
-                    class="flex h-7 w-7 items-center justify-center rounded text-gray-400 hover:bg-gray-800 hover:text-gray-100"
+                    aria-label={playingId() === entry.id ? "Stop" : "Play"}
                     title={playingId() === entry.id ? "Stop" : "Play"}
+                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-content-secondary transition-colors hover:bg-[var(--control-hover)] hover:text-content"
                   >
                     {playingId() === entry.id ? (
-                      <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                        <rect x="6" y="4" width="4" height="16" rx="1" />
-                        <rect x="14" y="4" width="4" height="16" rx="1" />
-                      </svg>
+                      <IconPause class="h-3.5 w-3.5" />
                     ) : (
-                      <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
+                      <IconPlay class="h-3.5 w-3.5" />
                     )}
                   </button>
                 </div>
-                <span class="shrink-0 rounded bg-gray-800 px-1.5 py-0.5 text-xs text-blue-400">
+                <span class="shrink-0 rounded bg-[var(--control-hover)] px-1.5 py-0.5 text-[11px] text-accent">
                   {entry.voice}
+                  <span class="ml-1 text-content-tertiary">
+                    {relativeTime(entry.timestamp)}
+                  </span>
                 </span>
-                <p class="min-w-0 flex-1 truncate text-sm text-gray-100">{entry.text}</p>
+                <p class="min-w-0 flex-1 truncate text-[12px] text-content">
+                  {entry.text}
+                </p>
                 <div onClick={(e) => e.stopPropagation()}>
                   <button
+                    type="button"
+                    onClick={() => {
+                      invoke("save_history_audio", {
+                        id: entry.id,
+                        defaultName: recordingNameFromSeconds(entry.timestamp),
+                      }).catch((e) => {
+                        if (e !== "Cancelled") console.error(e);
+                      });
+                    }}
+                    aria-label="Download"
+                    title="Download"
+                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-content-secondary transition-colors hover:bg-[var(--control-hover)] hover:text-content"
+                  >
+                    <IconDownload class="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
                     onClick={async () => {
+                      if (
+                        !(await confirm("Delete this entry?", {
+                          title: "Delete Entry",
+                          kind: "warning",
+                        }))
+                      )
+                        return;
                       try {
                         await invoke("delete_history_entry", { id: entry.id });
+                        if (playingId() === entry.id) {
+                          setPlayingId(null);
+                          revokeCurrent();
+                        }
                         props.onDelete(entry.id);
                       } catch (e) {
-                        console.error(e);
+                        props.onError?.(String(e));
                       }
                     }}
-                    class="flex h-7 w-7 items-center justify-center rounded text-red-400 hover:bg-gray-800"
+                    aria-label="Delete"
                     title="Delete"
+                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-danger transition-colors hover:bg-[var(--control-hover)]"
                   >
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <IconTrash class="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
-              <p class="pl-9 text-xs text-gray-600">{relTime(entry.timestamp)}</p>
-            </div>
-          ))}
+            )}
+          </For>
         </div>
-      )}
+      </Show>
     </div>
   );
 }

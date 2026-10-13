@@ -1,3 +1,5 @@
+import { IconSpeaker } from "./icons";
+
 interface Props {
   onClick: () => void;
   loading: boolean;
@@ -7,9 +9,11 @@ interface Props {
 function GenerateButton(props: Props) {
   return (
     <button
+      type="button"
       onClick={props.onClick}
       disabled={props.disabled || props.loading}
-      class="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+      title="Generate (⌘↵)"
+      class="flex h-7 items-center gap-1.5 rounded-md bg-accent px-3 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
     >
       {props.loading ? (
         <svg
@@ -33,23 +37,9 @@ function GenerateButton(props: Props) {
           />
         </svg>
       ) : (
-        <>
-          <svg
-            class="h-3.5 w-3.5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-            />
-          </svg>
-          Generate
-        </>
+        <IconSpeaker class="h-4 w-4" />
       )}
+      Generate
     </button>
   );
 }

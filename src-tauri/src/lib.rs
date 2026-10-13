@@ -1,4 +1,5 @@
 mod commands;
+mod settings;
 
 use kokoro_en::KokoroTts;
 use std::path::{Path, PathBuf};
@@ -8,6 +9,7 @@ pub struct AppState {
     pub tts: KokoroTts,
     pub voices: Vec<String>,
     pub history_path: PathBuf,
+    pub settings_path: PathBuf,
 }
 
 fn resolve_resource(dir: &Path, name: &str) -> PathBuf {
@@ -46,23 +48,27 @@ pub fn run() {
             let voices = collect_voices(&voices_path);
 
             let history_path = app.path().app_data_dir()?.join("history");
+            let settings_path = app.path().app_data_dir()?.join("settings.json");
 
             let tts = tauri::async_runtime::block_on(
                 KokoroTts::new(&model_path, &voices_path),
             )
             .expect("Failed to initialize KokoroTts");
 
-            app.manage(AppState { tts, voices, history_path });
+            app.manage(AppState { tts, voices, history_path, settings_path });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_voices,
             commands::synth,
             commands::save_audio,
-            commands::save_generation,
             commands::get_history,
             commands::load_history_audio,
             commands::delete_history_entry,
+            commands::save_history_audio,
+            commands::clear_history,
+            commands::get_settings,
+            commands::save_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

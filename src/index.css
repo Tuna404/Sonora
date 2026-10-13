@@ -1,21 +1,121 @@
-@import "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap";
-@import "https://fonts.googleapis.com/css2?family=Boldonse&display=swap";
 @import "tailwindcss";
 
+/* System font + semantic color tokens, mapped so Tailwind utilities resolve to
+   the CSS variables below and therefore follow the system appearance. */
 @theme {
-  --font-sans: "JetBrains Mono", ui-monospace, monospace;
-  --color-kokoro-50: #eff6ff;
-  --color-kokoro-100: #dbeafe;
-  --color-kokoro-200: #bfdbfe;
-  --color-kokoro-300: #93c5fd;
-  --color-kokoro-400: #60a5fa;
-  --color-kokoro-500: #3b82f6;
-  --color-kokoro-600: #2563eb;
-  --color-kokoro-700: #1d4ed8;
-  --color-kokoro-800: #1e40af;
-  --color-kokoro-900: #1e3a8a;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+    "Segoe UI", system-ui, sans-serif;
+
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-separator: var(--separator);
+  --color-content: var(--text-primary);
+  --color-content-secondary: var(--text-secondary);
+  --color-content-tertiary: var(--text-tertiary);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-danger: var(--danger);
 }
 
-html {
+:root {
+  color-scheme: light dark;
+
+  --surface: #ececec;
+  --surface-elevated: #ffffff;
+  --surface-translucent: rgba(246, 246, 246, 0.72);
+  --editor: #ffffff;
+  --control: #ffffff;
+  --control-border: rgba(0, 0, 0, 0.16);
+  --control-hover: rgba(0, 0, 0, 0.06);
+  --control-active: rgba(0, 0, 0, 0.12);
+  --separator: rgba(0, 0, 0, 0.1);
+  --text-primary: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #a1a1a6;
+  --accent: #007aff;
+  --accent-hover: #0071e3;
+  --danger: #d70015;
+  --danger-bg: rgba(215, 0, 21, 0.08);
+  --scrim: rgba(0, 0, 0, 0.28);
+  --focus-ring: rgba(0, 122, 255, 0.32);
+
+  color: var(--text-primary);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #232323;
+    --surface-elevated: #2c2c2e;
+    --surface-translucent: rgba(35, 35, 35, 0.72);
+    --editor: #1c1c1e;
+    --control: #3a3a3c;
+    --control-border: rgba(255, 255, 255, 0.14);
+    --control-hover: rgba(255, 255, 255, 0.08);
+    --control-active: rgba(255, 255, 255, 0.14);
+    --separator: rgba(255, 255, 255, 0.1);
+    --text-primary: #f5f5f7;
+    --text-secondary: #aeaeb2;
+    --text-tertiary: #6e6e73;
+    --accent: #0a84ff;
+    --accent-hover: #2997ff;
+    --danger: #ff453a;
+    --danger-bg: rgba(255, 69, 58, 0.12);
+    --scrim: rgba(0, 0, 0, 0.5);
+    --focus-ring: rgba(10, 132, 255, 0.4);
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--text-primary);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.animate-fade-in {
+  animation: fade-in 0.18s ease-out;
 }
