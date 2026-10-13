@@ -37,7 +37,7 @@
   --danger: #d70015;
   --danger-bg: rgba(215, 0, 21, 0.08);
   --scrim: rgba(0, 0, 0, 0.28);
-  --focus-ring: rgba(0, 122, 255, 0.32);
+  --focus-border: #c7c7cc;
 
   color: var(--text-primary);
   font-family: var(--font-sans);
@@ -64,7 +64,7 @@
     --danger: #ff453a;
     --danger-bg: rgba(255, 69, 58, 0.12);
     --scrim: rgba(0, 0, 0, 0.5);
-    --focus-ring: rgba(10, 132, 255, 0.4);
+    --focus-border: #48484a;
   }
 }
 
@@ -89,9 +89,11 @@ textarea {
   user-select: text;
 }
 
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--focus-border);
+    outline-offset: 1px;
+  }
 }
 
 @keyframes slide-in-right {

@@ -41,7 +41,7 @@ function Toolbar(props: Props) {
       {/* Reserve space for the native macOS traffic lights. */}
       <div class="flex flex-1 items-center pl-[76px]" />
       <div class="shrink-0 text-center text-[13px] font-semibold text-content-secondary">
-        KokoroU
+        Sonora
       </div>
       {/* Symmetric flex-1 zone keeps the title centered. */}
       <div class="flex flex-1 items-center justify-end gap-2 pr-3">

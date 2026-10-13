@@ -1,0 +1,61 @@
+name: Build macOS App
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v0.1.0)"
+        required: true
+        default: "v0.1.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build .app (arm64, ad-hoc signed)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download TTS model and voices
+        run: ./scripts/download-models.sh
+
+      - name: Build app bundle
+        run: bun tauri build --bundles app
+
+      - name: Ad-hoc sign the app
+        run: |
+          APP="src-tauri/target/release/bundle/macos/Sonora.app"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --verbose=2 "$APP"
+
+      - name: Zip the .app
+        run: |
+          APP="src-tauri/target/release/bundle/macos/Sonora.app"
+          ditto -c -k --keepParent "$APP" Sonora-macos.zip
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: Sonora ${{ inputs.tag }}
+          files: Sonora-macos.zip
+          generate_release_notes: true

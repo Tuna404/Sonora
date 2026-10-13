@@ -149,7 +149,7 @@ function VoiceSelector(props: Props) {
                 value={query()}
                 onInput={(e) => setQuery(e.currentTarget.value)}
                 placeholder="Search voices..."
-                class="w-full bg-transparent px-1 py-1.5 text-[13px] text-content placeholder:text-content-tertiary outline-none"
+                class="w-full rounded border border-transparent bg-transparent px-1 py-1.5 text-[13px] text-content placeholder:text-content-tertiary focus:border-[var(--focus-border)] focus:outline-none"
               />
             </li>
             {grouped().length === 0 ? (

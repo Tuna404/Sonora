@@ -1,4 +1,4 @@
-# KokoroU
+# Sonora
 
 A Tauri v2 desktop app for generating speech from text using the Kokoro TTS model.
 
@@ -16,7 +16,7 @@ A Tauri v2 desktop app for generating speech from text using the Kokoro TTS mode
 
 ```
 ┌─────────────────────────────────────────┐
-│           Tauri App (KokoroU)          │
+│           Tauri App (Sonora)           │
 │                                         │
 │  ┌───────────┐      ┌──────────────┐   │
 │  │ SolidJS   │◄────►│ Rust Backend │   │
@@ -55,7 +55,7 @@ Handlers live in `src-tauri/src/commands.rs`. The `KokoroTts` instance is manage
 | `SlideOver` | Right-docked panel primitive (used by History) |
 | `ControlBar` | Bottom bar: voice, speed (+reset), char counter, New, Clear, Generate |
 | `VoiceSelector` | Searchable, keyboard-navigable dropdown populated from `list_voices` |
-| `TextInput` | Full-height textarea that fills available space |
+| `TextInput` | Full-height textarea; typing, ⌘↵, or drop a `.txt` (replaces text) |
 | `SpeedControl` | Slider for speaking rate (0.5–2.0×) with reset-to-1× button |
 | `GenerateButton` | Primary button, calls `synth`, shows loading spinner |
 | `AudioPlayer` | Raw `<audio>` element with native controls |
@@ -72,9 +72,11 @@ Native macOS-style chrome: system font (SF Pro via `-apple-system`), semantic li
 
 With `Overlay`, the native title-bar drag is gone, so the window is dragged via the `Toolbar`'s `data-tauri-drag-region="deep"` attribute. That attribute invokes `plugin:window|start_dragging`, which is **not** part of `core:default` — the `core:window:allow-start-dragging` permission must stay in `src-tauri/capabilities/default.json` or the window becomes undraggable. `"deep"` makes the whole toolbar subtree draggable while clickable children (buttons/inputs) still block drag.
 
+Dropping a `.txt` onto the textarea uses the webview's HTML5 drag-and-drop, which requires `"dragDropEnabled": false` on the window — with Tauri's native drop handler enabled (the default) the `drop`/`dataTransfer.files` events never reach the frontend.
+
 ```
 ┌──────────────────────────────────────────┐
-│  ●●●   KokoroU               ⏱︎ │ ⚙︎     │  toolbar (drag region)
+│  ●●●   Sonora                ⏱︎ │ ⚙︎     │  toolbar (drag region)
 ├──────────────────────────────────────────┤
 │  ┌── text editor (fills window) ───────┐  │
 │  │  Enter text to speak...             │  │
@@ -95,7 +97,7 @@ Shortcuts and workspace actions: **New** (`⌘N`, control-bar button) clears the
 ## Project Structure
 
 ```
-kokorou/
+Sonora/
 ├── src/
 │   ├── index.tsx
 │   ├── index.css              # @import "tailwindcss", system font, light/dark semantic tokens
@@ -167,11 +169,3 @@ bun install
 ./scripts/download-models.sh
 bun tauri dev
 ```
-
-## Agent Rules
-
-1. **Think first** — understand the full context before writing code
-2. **Do we need this?** — question every addition; remove what isn't needed
-3. **Can we make it shorter?** — prefer simpler, smaller solutions
-4. **Test before finalizing** — run build checks, handle edge cases
-5. **Follow existing patterns** — match code style, naming, conventions

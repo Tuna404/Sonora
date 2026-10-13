@@ -68,7 +68,7 @@ function HistoryPanel(props: Props) {
           value={query()}
           onInput={(e) => setQuery(e.currentTarget.value)}
           placeholder="Filter by text or voice..."
-          class="min-w-0 flex-1 rounded-md border border-separator bg-[var(--editor)] px-2 py-1 text-[12px] text-content placeholder:text-content-tertiary focus:border-accent focus:outline-none"
+          class="min-w-0 flex-1 rounded-md border border-separator bg-[var(--editor)] px-2 py-1 text-[12px] text-content placeholder:text-content-tertiary focus:border-[var(--focus-border)] focus:outline-none"
         />
         <Show when={props.entries.length > 0}>
           <button
