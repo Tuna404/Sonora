@@ -8,7 +8,6 @@ dist
 #Temp
 public/
 src/assets
-src-tauri/icons
 
 # TTS model files (downloaded via scripts/download-models.sh)
 src-tauri/resources/
