@@ -2186,22 +2186,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kokorou"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "hound",
- "kokoro-en",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "tokio",
-]
-
-[[package]]
 name = "language-tokenizer"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3823,6 +3807,22 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "sonora"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "hound",
+ "kokoro-en",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "tokio",
 ]
 
 [[package]]

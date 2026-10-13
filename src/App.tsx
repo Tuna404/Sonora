@@ -15,6 +15,10 @@ import type { SynthSaveResult, SynthResult, HistoryEntry, Settings } from "./lib
 
 type Overlay = "none" | "history" | "settings";
 
+const VOICE_STORAGE_KEY = "sonora_voice";
+/** Pre-rename key, still read as a fallback so an existing saved voice survives the rename. */
+const LEGACY_VOICE_STORAGE_KEY = "kokorou_voice";
+
 function App() {
   const [voices, setVoices] = createSignal<string[]>([]);
   const [selectedVoice, setSelectedVoice] = createSignal("");
@@ -49,7 +53,7 @@ function App() {
   function handleVoiceChange(v: string) {
     setSelectedVoice(v);
     revokeAudio();
-    localStorage.setItem("kokorou_voice", v);
+    localStorage.setItem(VOICE_STORAGE_KEY, v);
   }
 
   function handleSpeedChange(v: number) {
@@ -103,7 +107,10 @@ function App() {
       setSettings(s);
       setSpeed(s.default_speed);
 
-      const savedVoice = s.default_voice || localStorage.getItem("kokorou_voice");
+      const savedVoice =
+        s.default_voice ||
+        localStorage.getItem(VOICE_STORAGE_KEY) ||
+        localStorage.getItem(LEGACY_VOICE_STORAGE_KEY);
       if (savedVoice && v.includes(savedVoice)) {
         setSelectedVoice(savedVoice);
       } else if (v.length > 0) {

@@ -66,3 +66,7 @@ See [`AGENTS.md`](AGENTS.md) for architecture, Tauri commands, and conventions.
 ## License
 
 [MIT](LICENSE)
+
+Bundled model weights and voices come from
+[Kokoro-82M](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX), licensed
+[Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0).
