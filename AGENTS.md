@@ -167,6 +167,8 @@ Run `scripts/download-models.sh` after cloning to fetch them. The script uses th
 
 Files under `src-tauri/resources/` are gitignored — must be downloaded locally.
 
+**ONNX Runtime / Linux build floor.** `kokoro-en` pulls in `ort`/`ort-sys`, which downloads a prebuilt ONNX Runtime at build time and statically links it. `kokoro-en` unconditionally enables ort's `cuda`, `directml`, `coreml`, and `lax-feature-matching` features — Cargo features are additive, so downstream crates cannot turn them off — so on Linux ort-sys selects the `cuda13,tensorrt,nvrtx` dist. That prebuilt is compiled against **glibc ≥ 2.38** and **libstdc++ ≥ GCC 12**, which means Linux builds must run on **Ubuntu 24.04+** and the produced binaries require **glibc ≥ 2.38** at runtime. Building on Ubuntu 22.04 fails at link time with undefined `__isoc23_strto*` and `std::__cxx11::basic_string::_M_replace_cold` symbols.
+
 ## Commands
 
 ```sh

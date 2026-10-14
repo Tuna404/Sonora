@@ -14,9 +14,10 @@ permissions:
 jobs:
   build-linux:
     name: Build AppImage, .deb and .rpm (x86_64)
-    # Ubuntu 22.04 is the oldest baseline that still ships libwebkit2gtk-4.1,
-    # which keeps the AppImage's minimum glibc as low as possible.
-    runs-on: ubuntu-22.04
+    # Must be 24.04+: the prebuilt ONNX Runtime that ort-sys links against is
+    # compiled against glibc >= 2.38 and libstdc++ >= GCC 12, which 22.04
+    # (glibc 2.35 / GCC 11) cannot satisfy. See AGENTS.md.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,7 +37,7 @@ jobs:
             librsvg2-dev \
             cmake \
             patchelf \
-            libfuse2
+            libfuse2t64
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -55,7 +56,7 @@ jobs:
       - name: Cache ONNX Runtime binaries
         uses: actions/cache@v4
         with:
-          path: ~/.cache/dfbin
+          path: ~/.cache/ort.pyke.io/dfbin
           key: ort-binaries-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
 
       - name: Install frontend dependencies

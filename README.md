@@ -63,6 +63,7 @@ sudo dnf install ./Sonora-*.rpm
 
 Linux builds render with **WebKitGTK 4.1** and play audio through **GStreamer**, so the host needs:
 
+- **glibc 2.38 or newer** — Ubuntu 24.04+, Debian 13+, Fedora 39+, RHEL 10+ (required by the bundled ONNX Runtime)
 - `libwebkit2gtk-4.1-0` — the AppImage is *not* fully self-contained and still requires this
 - `libgtk-3-0`
 - `gstreamer1.0-plugins-base` and `gstreamer1.0-plugins-good` (WAV playback)
@@ -86,7 +87,9 @@ This downloads `model.onnx` (~325 MB, fp32) and all 55 voice packs from Hugging 
 Prerequisites: **Rust**, **Bun**, and **CMake** (espeak-ng is compiled from source during the build).
 
 - **macOS**: the Xcode Command Line Tools.
-- **Linux**: `libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf` (plus `cmake`, and `libfuse2` for AppImage bundling).
+- **Linux** (build on **Ubuntu 24.04 or newer** — see below): `libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf cmake`, plus the FUSE 2 runtime (`libfuse2t64` on 24.04) for AppImage bundling.
+
+> The Linux build links a prebuilt ONNX Runtime that requires **glibc ≥ 2.38** and **libstdc++ ≥ GCC 12**, so it must be built on Ubuntu 24.04+.
 
 ```sh
 bun install
