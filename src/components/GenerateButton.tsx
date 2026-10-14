@@ -1,3 +1,4 @@
+import { formatShortcut } from "../lib/platform";
 import { IconSpeaker } from "./icons";
 
 interface Props {
@@ -12,7 +13,7 @@ function GenerateButton(props: Props) {
       type="button"
       onClick={props.onClick}
       disabled={props.disabled || props.loading}
-      title="Generate (⌘↵)"
+      title={`Generate (${formatShortcut("↵")})`}
       class="flex h-7 items-center gap-1.5 rounded-md bg-accent px-3 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
     >
       {props.loading ? (

@@ -70,11 +70,13 @@ Root component `App.tsx` composes these. **Generate is the whole window**; Histo
 
 Native macOS-style chrome: system font (SF Pro via `-apple-system`), semantic light/dark tokens (see `index.css`), translucent toolbar/sheets with backdrop blur, hairline separators. Window uses `titleBarStyle: "Overlay"` + `hiddenTitle` so content extends under the traffic lights; `trafficLightPosition` centers them with the 44px toolbar (on macOS the light center lands ≈ `y` px from the top, so keep `y` ≈ toolbar height / 2 — currently 22).
 
+On **Linux** none of those keys apply (they're macOS-only and ignored), so `tauri.linux.conf.json` merges a window override that keeps the native GTK decorations. `Toolbar` therefore drops the 76px traffic-light inset and the centered title when `isMacOS()` (`src/lib/platform.ts`) is false, and `formatShortcut()` renders `Ctrl+N` / `Ctrl+Enter` instead of `⌘N` / `⌘↵` in tooltips. The Linux file also declares the bundle targets (`deb`, `rpm`, `appimage`), the `.deb` runtime deps, and `appimage.bundleMediaFramework: true` — the latter is required because `<audio>` playback in WebKitGTK goes through GStreamer.
+
 With `Overlay`, the native title-bar drag is gone, so the window is dragged via the `Toolbar`'s `data-tauri-drag-region="deep"` attribute. That attribute invokes `plugin:window|start_dragging`, which is **not** part of `core:default` — the `core:window:allow-start-dragging` permission must stay in `src-tauri/capabilities/default.json` or the window becomes undraggable. `"deep"` makes the whole toolbar subtree draggable while clickable children (buttons/inputs) still block drag.
 
 Dropping a `.txt` onto the textarea uses the webview's HTML5 drag-and-drop, which requires `"dragDropEnabled": false` on the window — with Tauri's native drop handler enabled (the default) the `drop`/`dataTransfer.files` events never reach the frontend.
 
-**Identifier = data directory.** `tauri.conf.json > identifier` (`com.ymac.sonora`) is the sole input to `app_data_dir()`, so history and `settings.json` live at `~/Library/Application Support/com.ymac.sonora/`. Changing the identifier silently orphans that data (and on macOS also re-scopes the code-signing identity), so treat it as frozen once anything ships.
+**Identifier = data directory.** `tauri.conf.json > identifier` (`com.ymac.sonora`) is the sole input to `app_data_dir()`, so history and `settings.json` live at `~/Library/Application Support/com.ymac.sonora/` on macOS and `~/.local/share/com.ymac.sonora/` on Linux. Changing the identifier silently orphans that data (and on macOS also re-scopes the code-signing identity), so treat it as frozen once anything ships.
 
 ```
 ┌──────────────────────────────────────────┐
@@ -133,7 +135,8 @@ Sonora/
 │   │   ├── model.onnx         # fp32 (~325 MB, downloaded)
 │   │   └── voices/            # all 55 *.bin voice files (downloaded)
 │   ├── Cargo.toml             # +kokoro-en, base64, hound, tauri-plugin-dialog
-│   └── tauri.conf.json
+│   ├── tauri.conf.json
+│   └── tauri.linux.conf.json  # Linux window + bundle overrides (merged on Linux)
 ├── scripts/
 │   └── download-models.sh     # dynamically fetches model + 55 voices from HF API
 ├── package.json               # +@tauri-apps/plugin-dialog
@@ -171,3 +174,9 @@ bun install
 ./scripts/download-models.sh
 bun tauri dev
 ```
+
+Build release bundles: `bun tauri build --bundles app` on macOS, or
+`bun tauri build --bundles deb,rpm,appimage` on Linux (x86_64; needs CMake for
+espeak-ng plus the WebKitGTK/patchelf/libfuse2 system packages). GitHub Actions
+workflows `build-macos.yml` and `build-linux.yml` publish both, and are triggered
+manually with a release tag.

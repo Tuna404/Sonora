@@ -22,7 +22,7 @@ Sonora is a native, **fully offline** text-to-speech desktop app. Type or drop i
 - **Type, paste, or drop a `.txt`** to load text.
 - **History** — every generation is saved; replay, re-use, download, or delete.
 - **Settings** — default voice, speed, audio format, and save location.
-- **Native macOS chrome** — unified toolbar, system light/dark, centered traffic lights.
+- **Native system chrome** — unified toolbar, system light/dark, and macOS traffic lights.
 
 ## Download (macOS)
 
@@ -33,6 +33,43 @@ Grab the latest **`Sonora-macos.zip`** from the [**Releases**](../../releases/la
 ### ⚠️ Unsigned & not notarized
 
 Builds are **ad-hoc signed only** — they are **not** notarized by Apple, so Gatekeeper will refuse to open a downloaded copy ("…cannot be opened because the developer cannot be verified", or "…is damaged and can't be opened"). To allow it, open **System Settings → Privacy & Security** and click **Open Anyway** next to the blocked-app notice.
+
+## Download (Linux)
+
+Grab the latest **`.AppImage`**, **`.deb`**, or **`.rpm`** from the [**Releases**](../../releases/latest) page.
+
+> The builds are **x86_64-only**.
+
+**AppImage** (portable, no installation):
+
+```sh
+chmod +x Sonora_*.AppImage
+./Sonora_*.AppImage
+```
+
+**Debian / Ubuntu**:
+
+```sh
+sudo apt install ./Sonora_*.deb
+```
+
+**Fedora / RHEL**:
+
+```sh
+sudo dnf install ./Sonora-*.rpm
+```
+
+### Runtime requirements
+
+Linux builds render with **WebKitGTK 4.1** and play audio through **GStreamer**, so the host needs:
+
+- `libwebkit2gtk-4.1-0` — the AppImage is *not* fully self-contained and still requires this
+- `libgtk-3-0`
+- `gstreamer1.0-plugins-base` and `gstreamer1.0-plugins-good` (WAV playback)
+
+The `.deb` declares these as dependencies; install them yourself for the AppImage or `.rpm` if your distribution doesn't pull them in.
+
+> ⚠️ **Unsigned** — Linux packages aren't code-signed, so your package manager may warn about an untrusted package.
 
 ## Model setup
 
@@ -46,7 +83,10 @@ This downloads `model.onnx` (~325 MB, fp32) and all 55 voice packs from Hugging 
 
 ## Development
 
-Prerequisites: **Rust**, **Bun**, and the Xcode Command Line Tools (macOS).
+Prerequisites: **Rust**, **Bun**, and **CMake** (espeak-ng is compiled from source during the build).
+
+- **macOS**: the Xcode Command Line Tools.
+- **Linux**: `libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf` (plus `cmake`, and `libfuse2` for AppImage bundling).
 
 ```sh
 bun install
@@ -54,11 +94,16 @@ bun install
 bun tauri dev
 ```
 
-Build a release `.app`:
+Build release bundles:
 
 ```sh
+# macOS
 bun tauri build --bundles app
 # → src-tauri/target/release/bundle/macos/Sonora.app
+
+# Linux
+bun tauri build --bundles deb,rpm,appimage
+# → src-tauri/target/release/bundle/{appimage,deb,rpm}/
 ```
 
 See [`AGENTS.md`](AGENTS.md) for architecture, Tauri commands, and conventions.

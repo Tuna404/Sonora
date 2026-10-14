@@ -2,6 +2,7 @@ import { Show } from "solid-js";
 import VoiceSelector from "./VoiceSelector";
 import SpeedControl from "./SpeedControl";
 import GenerateButton from "./GenerateButton";
+import { formatShortcut } from "../lib/platform";
 import { IconNew } from "./icons";
 
 interface Props {
@@ -43,7 +44,7 @@ function ControlBar(props: Props) {
         type="button"
         onClick={props.onNew}
         disabled={!props.canNew}
-        title="New (⌘N)"
+        title={`New (${formatShortcut("N")})`}
         class="flex h-7 items-center gap-1.5 rounded-md border border-[var(--control-border)] bg-[var(--control)] px-3 text-[13px] font-medium text-content transition-colors hover:bg-[var(--control-hover)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[var(--control)]"
       >
         <IconNew class="h-4 w-4" />

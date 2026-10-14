@@ -4,7 +4,7 @@
    the CSS variables below and therefore follow the system appearance. */
 @theme {
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
-    "Segoe UI", system-ui, sans-serif;
+    "Segoe UI", "Cantarell", "Ubuntu", "Noto Sans", system-ui, sans-serif;
 
   --color-surface: var(--surface);
   --color-surface-elevated: var(--surface-elevated);

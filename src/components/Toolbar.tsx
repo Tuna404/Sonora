@@ -1,4 +1,5 @@
-import type { JSX } from "solid-js";
+import { Show, type JSX } from "solid-js";
+import { isMacOS } from "../lib/platform";
 import { IconHistory, IconSettings } from "./icons";
 
 interface Props {
@@ -38,12 +39,17 @@ function Toolbar(props: Props) {
       data-tauri-drag-region="deep"
       class="flex h-11 shrink-0 items-center border-b border-separator bg-[var(--surface-translucent)] backdrop-blur-xl"
     >
-      {/* Reserve space for the native macOS traffic lights. */}
-      <div class="flex flex-1 items-center pl-[76px]" />
-      <div class="shrink-0 text-center text-[13px] font-semibold text-content-secondary">
-        Sonora
-      </div>
-      {/* Symmetric flex-1 zone keeps the title centered. */}
+      {/* On macOS the traffic lights overlay the content, so reserve space for
+          them; elsewhere the OS title bar already shows the app name. */}
+      <div
+        class={`flex flex-1 items-center ${isMacOS() ? "pl-[76px]" : "pl-3"}`}
+      />
+      <Show when={isMacOS()}>
+        <div class="shrink-0 text-center text-[13px] font-semibold text-content-secondary">
+          Sonora
+        </div>
+      </Show>
+      {/* Symmetric flex-1 zones keep the title centered when it's shown. */}
       <div class="flex flex-1 items-center justify-end gap-2 pr-3">
         <ToolbarButton
           label="History"
